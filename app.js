@@ -94,18 +94,39 @@ const loadingDiv = document.getElementById('loading');
 const errorDiv = document.getElementById('error');
 const pageTitle = document.getElementById('page-title');
 
-// Parse URL path to get book, chapter, and optional verse
+// Parse URL path to get book, chapter, and optional verse/verse range
 function parseURL() {
     const path = window.location.pathname;
     const parts = path.split('/').filter(p => p);
     
     if (parts.length >= 2) {
         const bookName = parts[0].toLowerCase();
-        // Handle chapter-verse format like "3-16"
         const chapterPart = parts[1];
-        const [chapterStr, verseStr] = chapterPart.split('-');
-        const chapterNum = parseInt(chapterStr);
-        const verseNum = verseStr ? parseInt(verseStr) : null;
+        
+        let chapterNum, verseStart, verseEnd;
+        
+        // Check if using colon format (e.g., "3:16" or "3:16-20")
+        if (chapterPart.includes(':')) {
+            const [chapterStr, verseStr] = chapterPart.split(':');
+            chapterNum = parseInt(chapterStr);
+            
+            // Check for verse range (e.g., "16-20")
+            if (verseStr && verseStr.includes('-')) {
+                const [startStr, endStr] = verseStr.split('-');
+                verseStart = parseInt(startStr);
+                verseEnd = parseInt(endStr);
+            } else {
+                verseStart = verseStr ? parseInt(verseStr) : null;
+            }
+        } else if (chapterPart.includes('-')) {
+            // Using dash format (e.g., "3-16"), only single verse
+            const [chapterStr, verseStr] = chapterPart.split('-');
+            chapterNum = parseInt(chapterStr);
+            verseStart = verseStr ? parseInt(verseStr) : null;
+        } else {
+            // Just chapter number
+            chapterNum = parseInt(chapterPart);
+        }
         
         // Find book by name (case-insensitive match)
         const book = BIBLE_BOOKS.find(b => 
@@ -118,9 +139,14 @@ function parseURL() {
         // Validate chapter number
         if (book && chapterNum && chapterNum >= 1 && chapterNum <= book.chapters) {
             const result = { bookId: book.id, chapter: chapterNum.toString() };
-            if (verseNum && verseNum >= 1) {
-                result.verse = verseNum.toString();
+            
+            if (verseStart && verseStart >= 1) {
+                result.verseStart = verseStart.toString();
+                if (verseEnd && verseEnd >= verseStart) {
+                    result.verseEnd = verseEnd.toString();
+                }
             }
+            
             console.log('Parsed URL:', result);
             return result;
         } else {
@@ -144,9 +170,87 @@ function updateURL(verse = null) {
     }
 }
 
+// Save translation order to localStorage
+function saveTranslationOrder() {
+    const translationLabels = document.querySelectorAll('.translation-checkbox');
+    const order = Array.from(translationLabels).map(label => 
+        label.getAttribute('data-translation')
+    );
+    localStorage.setItem('translationOrder', JSON.stringify(order));
+    console.log('Saved translation order:', order);
+}
+
+// Restore translation order from localStorage
+function restoreTranslationOrder() {
+    const savedOrder = localStorage.getItem('translationOrder');
+    if (!savedOrder) return;
+    
+    try {
+        const order = JSON.parse(savedOrder);
+        const translationOptions = document.getElementById('translation-options');
+        const translationLabels = Array.from(document.querySelectorAll('.translation-checkbox'));
+        
+        // Create a map of translation ID to element
+        const elementMap = {};
+        translationLabels.forEach(label => {
+            const transId = label.getAttribute('data-translation');
+            elementMap[transId] = label;
+        });
+        
+        // Reorder based on saved order
+        order.forEach(transId => {
+            if (elementMap[transId]) {
+                translationOptions.appendChild(elementMap[transId]);
+            }
+        });
+        
+        console.log('Restored translation order:', order);
+    } catch (e) {
+        console.error('Failed to restore translation order:', e);
+    }
+}
+
+// Save translation selections to localStorage
+function saveTranslationSelections() {
+    const checkboxes = document.querySelectorAll('.translation-checkbox input[type="checkbox"]');
+    const selections = {};
+    
+    checkboxes.forEach(checkbox => {
+        selections[checkbox.value] = checkbox.checked;
+    });
+    
+    localStorage.setItem('translationSelections', JSON.stringify(selections));
+    console.log('Saved translation selections:', selections);
+}
+
+// Restore translation selections from localStorage
+function restoreTranslationSelections() {
+    const savedSelections = localStorage.getItem('translationSelections');
+    if (!savedSelections) return;
+    
+    try {
+        const selections = JSON.parse(savedSelections);
+        const checkboxes = document.querySelectorAll('.translation-checkbox input[type="checkbox"]');
+        
+        checkboxes.forEach(checkbox => {
+            if (selections.hasOwnProperty(checkbox.value)) {
+                checkbox.checked = selections[checkbox.value];
+            }
+        });
+        
+        console.log('Restored translation selections:', selections);
+    } catch (e) {
+        console.error('Failed to restore translation selections:', e);
+    }
+}
+
 // Initialize the app
 async function init() {
     populateBookSelect();
+    
+    // Restore translation order and selections before loading anything
+    restoreTranslationOrder();
+    restoreTranslationSelections();
     
     // Load Bible data
     showLoading();
@@ -185,10 +289,12 @@ async function init() {
     updatePageTitle();
     await loadChapter();
     
-    // If URL has a verse, highlight and scroll to it
-    if (urlParams && urlParams.verse) {
+    // If URL has a verse or verse range, highlight and scroll to it
+    if (urlParams && urlParams.verseStart) {
         setTimeout(() => {
-            highlightAndScrollToVerse(urlParams.verse);
+            const start = parseInt(urlParams.verseStart);
+            const end = urlParams.verseEnd ? parseInt(urlParams.verseEnd) : start;
+            highlightAndScrollToVerse(start, end);
         }, 100);
     }
     
@@ -272,12 +378,18 @@ function setupEventListeners() {
     const translationCheckboxes = document.querySelectorAll('.translation-checkbox input');
     translationCheckboxes.forEach(checkbox => {
         checkbox.addEventListener('change', () => {
+            // Save the selection state
+            saveTranslationSelections();
+            
             // Only reload if there's content already displayed
             if (contentDiv.querySelector('.parallel-view')) {
                 loadChapter();
             }
         });
     });
+    
+    // Setup drag and drop for translation reordering
+    setupDragAndDrop();
     
     // Handle browser back/forward navigation
     window.addEventListener('popstate', () => {
@@ -288,9 +400,11 @@ function setupEventListeners() {
             chapterSelect.value = urlParams.chapter;
             updatePageTitle();
             loadChapter().then(() => {
-                if (urlParams.verse) {
+                if (urlParams.verseStart) {
                     setTimeout(() => {
-                        highlightAndScrollToVerse(urlParams.verse);
+                        const start = parseInt(urlParams.verseStart);
+                        const end = urlParams.verseEnd ? parseInt(urlParams.verseEnd) : start;
+                        highlightAndScrollToVerse(start, end);
                     }, 100);
                 }
             });
@@ -298,10 +412,89 @@ function setupEventListeners() {
     });
 }
 
-// Get selected translations
+// Get selected translations in their current display order
 function getSelectedTranslations() {
-    const checkboxes = document.querySelectorAll('.translation-checkbox input:checked');
-    return Array.from(checkboxes).map(cb => cb.value);
+    const translationLabels = document.querySelectorAll('.translation-checkbox');
+    const selected = [];
+    
+    translationLabels.forEach(label => {
+        const checkbox = label.querySelector('input[type="checkbox"]');
+        if (checkbox && checkbox.checked) {
+            selected.push(checkbox.value);
+        }
+    });
+    
+    return selected;
+}
+
+// Setup drag and drop for translation reordering
+function setupDragAndDrop() {
+    const translationOptions = document.getElementById('translation-options');
+    const translationLabels = document.querySelectorAll('.translation-checkbox');
+    
+    let draggedElement = null;
+    
+    translationLabels.forEach(label => {
+        // Drag start
+        label.addEventListener('dragstart', (e) => {
+            draggedElement = label;
+            label.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', label.innerHTML);
+        });
+        
+        // Drag end
+        label.addEventListener('dragend', () => {
+            label.classList.remove('dragging');
+            // Remove drag-over class from all elements
+            document.querySelectorAll('.translation-checkbox').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+        });
+        
+        // Drag over
+        label.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            if (draggedElement !== label) {
+                label.classList.add('drag-over');
+            }
+        });
+        
+        // Drag leave
+        label.addEventListener('dragleave', () => {
+            label.classList.remove('drag-over');
+        });
+        
+        // Drop
+        label.addEventListener('drop', (e) => {
+            e.preventDefault();
+            label.classList.remove('drag-over');
+            
+            if (draggedElement !== label) {
+                // Get all labels
+                const allLabels = Array.from(translationOptions.querySelectorAll('.translation-checkbox'));
+                const draggedIndex = allLabels.indexOf(draggedElement);
+                const targetIndex = allLabels.indexOf(label);
+                
+                // Reorder in DOM
+                if (draggedIndex < targetIndex) {
+                    label.parentNode.insertBefore(draggedElement, label.nextSibling);
+                } else {
+                    label.parentNode.insertBefore(draggedElement, label);
+                }
+                
+                // Save the new order to localStorage
+                saveTranslationOrder();
+                
+                // Reload chapter with new order
+                if (contentDiv.querySelector('.parallel-view')) {
+                    loadChapter();
+                }
+            }
+        });
+    });
 }
 
 // Load and display chapter
@@ -362,20 +555,6 @@ function displayParallelText(data, translations) {
     const parallelView = document.createElement('div');
     parallelView.className = 'parallel-view';
     
-    // Create headers row
-    const headersRow = document.createElement('div');
-    headersRow.className = 'translation-headers';
-    headersRow.style.gridTemplateColumns = `repeat(${translations.length}, 1fr)`;
-    
-    translations.forEach(transId => {
-        const header = document.createElement('div');
-        header.className = 'translation-header';
-        header.textContent = TRANSLATIONS[transId] || transId.toUpperCase();
-        headersRow.appendChild(header);
-    });
-    
-    parallelView.appendChild(headersRow);
-    
     // Get the maximum number of verses across all translations
     const maxVerses = Math.max(...translations.map(transId => 
         (data[transId] && data[transId].length) || 0
@@ -405,7 +584,7 @@ function displayParallelText(data, translations) {
                 verseNum.addEventListener('click', (e) => {
                     e.preventDefault();
                     updateURL(verseNumber);
-                    highlightAndScrollToVerse(verseNumber);
+                    highlightAndScrollToVerse(verseNumber, verseNumber);
                 });
                 
                 const verseText = document.createElement('span');
@@ -428,20 +607,40 @@ function displayParallelText(data, translations) {
     contentDiv.appendChild(parallelView);
 }
 
-// Highlight and scroll to a specific verse
-function highlightAndScrollToVerse(verseNumber) {
-    // Remove previous highlights
+// Highlight and scroll to a specific verse or verse range
+function highlightAndScrollToVerse(verseStart, verseEnd = null) {
+    // Remove previous highlights and special classes
     document.querySelectorAll('.verse-row.highlighted').forEach(row => {
-        row.classList.remove('highlighted');
+        row.classList.remove('highlighted', 'highlight-first', 'highlight-last');
     });
     
-    // Highlight the target verse
-    const verseRow = document.getElementById(`verse-${verseNumber}`);
-    if (verseRow) {
-        verseRow.classList.add('highlighted');
-        
-        // Scroll to the verse with smooth scrolling
-        verseRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // If no end verse specified, just highlight one verse
+    const endVerse = verseEnd || verseStart;
+    
+    let firstVerse = null;
+    
+    // Highlight all verses in the range
+    for (let verseNum = verseStart; verseNum <= endVerse; verseNum++) {
+        const verseRow = document.getElementById(`verse-${verseNum}`);
+        if (verseRow) {
+            verseRow.classList.add('highlighted');
+            
+            // Add special class for first verse in range
+            if (verseNum === verseStart) {
+                verseRow.classList.add('highlight-first');
+                firstVerse = verseRow;
+            }
+            
+            // Add special class for last verse in range
+            if (verseNum === endVerse) {
+                verseRow.classList.add('highlight-last');
+            }
+        }
+    }
+    
+    // Scroll to the first verse in the range
+    if (firstVerse) {
+        firstVerse.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 }
 

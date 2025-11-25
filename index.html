@@ -32,14 +32,16 @@
 
             <div class="translation-selector">
                 <h3>Select Translations:</h3>
-                <div class="translation-options">
-                    <label class="translation-checkbox">
-                        <input type="checkbox" value="kjv" checked>
-                        <span>King James Version (KJV)</span>
-                    </label>
-                    <label class="translation-checkbox">
+                <div class="translation-options" id="translation-options">
+                    <label class="translation-checkbox" draggable="true" data-translation="rst">
                         <input type="checkbox" value="rst" checked>
                         <span>Russian Synodal Translation (RST)</span>
+                        <span class="drag-handle">⋮⋮</span>
+                    </label>
+                    <label class="translation-checkbox" draggable="true" data-translation="kjv">
+                        <input type="checkbox" value="kjv" checked>
+                        <span>King James Version (KJV)</span>
+                        <span class="drag-handle">⋮⋮</span>
                     </label>
                 </div>
             </div>
