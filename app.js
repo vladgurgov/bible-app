@@ -93,6 +93,8 @@ const contentDiv = document.getElementById('content');
 const loadingDiv = document.getElementById('loading');
 const errorDiv = document.getElementById('error');
 const pageTitle = document.getElementById('page-title');
+const prevChapterBtn = document.getElementById('prev-chapter');
+const nextChapterBtn = document.getElementById('next-chapter');
 
 // Parse URL path to get book, chapter, and optional verse/verse range
 function parseURL() {
@@ -357,6 +359,86 @@ function updatePageTitle() {
     } else {
         pageTitle.textContent = 'Bible Study';
     }
+    
+    updateNavigationArrows();
+}
+
+// Update navigation arrow states
+function updateNavigationArrows() {
+    const selectedBookId = bookSelect.value;
+    const book = BIBLE_BOOKS.find(b => b.id === selectedBookId);
+    const chapter = parseInt(chapterSelect.value);
+    
+    if (!book || !chapter) {
+        prevChapterBtn.disabled = true;
+        nextChapterBtn.disabled = true;
+        return;
+    }
+    
+    // Disable prev if at first chapter of first book
+    const bookIndex = BIBLE_BOOKS.findIndex(b => b.id === selectedBookId);
+    prevChapterBtn.disabled = (bookIndex === 0 && chapter === 1);
+    
+    // Disable next if at last chapter of last book
+    nextChapterBtn.disabled = (bookIndex === BIBLE_BOOKS.length - 1 && chapter === book.chapters);
+}
+
+// Navigate to previous chapter
+function navigateToPreviousChapter() {
+    const selectedBookId = bookSelect.value;
+    const book = BIBLE_BOOKS.find(b => b.id === selectedBookId);
+    const chapter = parseInt(chapterSelect.value);
+    
+    if (!book) return;
+    
+    if (chapter > 1) {
+        // Go to previous chapter in same book
+        chapterSelect.value = chapter - 1;
+        updatePageTitle();
+        updateURL();
+        loadChapter();
+    } else {
+        // Go to last chapter of previous book
+        const bookIndex = BIBLE_BOOKS.findIndex(b => b.id === selectedBookId);
+        if (bookIndex > 0) {
+            const prevBook = BIBLE_BOOKS[bookIndex - 1];
+            bookSelect.value = prevBook.id;
+            updateChapterSelect();
+            chapterSelect.value = prevBook.chapters;
+            updatePageTitle();
+            updateURL();
+            loadChapter();
+        }
+    }
+}
+
+// Navigate to next chapter
+function navigateToNextChapter() {
+    const selectedBookId = bookSelect.value;
+    const book = BIBLE_BOOKS.find(b => b.id === selectedBookId);
+    const chapter = parseInt(chapterSelect.value);
+    
+    if (!book) return;
+    
+    if (chapter < book.chapters) {
+        // Go to next chapter in same book
+        chapterSelect.value = chapter + 1;
+        updatePageTitle();
+        updateURL();
+        loadChapter();
+    } else {
+        // Go to first chapter of next book
+        const bookIndex = BIBLE_BOOKS.findIndex(b => b.id === selectedBookId);
+        if (bookIndex < BIBLE_BOOKS.length - 1) {
+            const nextBook = BIBLE_BOOKS[bookIndex + 1];
+            bookSelect.value = nextBook.id;
+            updateChapterSelect();
+            chapterSelect.value = 1;
+            updatePageTitle();
+            updateURL();
+            loadChapter();
+        }
+    }
 }
 
 // Setup event listeners
@@ -373,6 +455,10 @@ function setupEventListeners() {
         updateURL();
         loadChapter();
     });
+    
+    // Navigation arrows
+    prevChapterBtn.addEventListener('click', navigateToPreviousChapter);
+    nextChapterBtn.addEventListener('click', navigateToNextChapter);
     
     // Auto-reload when translation selection changes
     const translationCheckboxes = document.querySelectorAll('.translation-checkbox input');

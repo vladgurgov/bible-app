@@ -2,10 +2,19 @@
 
 A modern, beautiful web application for studying the Bible by reading multiple translations in parallel.
 
+## 🌐 Live Demo
+
+**[https://bible-6b8dq04s4-vlad-gurgovs-projects.vercel.app](https://bible-6b8dq04s4-vlad-gurgovs-projects.vercel.app)**
+
 ## Features
 
 - **Parallel Reading**: View multiple Bible translations side-by-side
 - **Multiple Translations**: Supports KJV and Russian Synodal Translation (all public domain)
+- **Shareable URLs**: Direct links to specific chapters and verses (e.g., `/john/3:16-20`)
+- **Verse Highlighting**: Click verse numbers to highlight and share specific verses or ranges
+- **Chapter Navigation**: Quick navigation with arrow buttons (‹ Chapter ›)
+- **Drag & Drop Reordering**: Rearrange translations left-to-right
+- **Persistent Settings**: Translation order and selections saved across sessions
 - **Easy Navigation**: Simple dropdown menus for books and chapters
 - **Responsive Design**: Works perfectly on desktop, tablet, and mobile
 - **Clean UI**: Modern, user-friendly interface
