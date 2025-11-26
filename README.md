@@ -4,7 +4,7 @@ A modern, beautiful web application for studying the Bible by reading multiple t
 
 ## 🌐 Live Demo
 
-**[https://bible-6b8dq04s4-vlad-gurgovs-projects.vercel.app](https://bible-6b8dq04s4-vlad-gurgovs-projects.vercel.app)**
+**[https://bible-app-pi-five.vercel.app](https://bible-app-pi-five.vercel.app)**
 
 ## Features
 
